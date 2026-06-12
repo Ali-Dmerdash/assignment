@@ -9,6 +9,8 @@
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
     "target": "esnext",
+    // Allow default imports of CommonJS deps (e.g. multer's `export =`) under ESM.
+    "esModuleInterop": true,
     // "types": [],
     // For nodejs:
     // "lib": ["esnext"],
