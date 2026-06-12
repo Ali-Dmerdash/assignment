@@ -6,9 +6,7 @@ settings:
 
 importers:
 
-  .: {}
-
-  backend:
+  .:
     dependencies:
       bcrypt:
         specifier: ^6.0.0
