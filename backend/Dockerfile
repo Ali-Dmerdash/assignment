@@ -24,4 +24,4 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
 
 EXPOSE 5000
-CMD ["node", "server/server.ts"]
+CMD ["node", "dist/server.js"]
