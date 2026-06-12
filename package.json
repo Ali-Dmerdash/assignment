@@ -6,8 +6,8 @@
     "frontend"
   ],
   "scripts": {
-    "dev:backend": "bun run --filter backend dev",
-    "dev:frontend": "bun run --filter frontend dev",
-    "dev": "bun run --parallel dev:backend dev:frontend"
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev": "pnpm --parallel dev:backend dev:frontend"
   }
 }
