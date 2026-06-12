@@ -28,6 +28,8 @@ services:
       - MONGO_URI=mongodb://mongo:27017/jobboard
       - JWT_SECRET=${JWT_SECRET}
       - NODE_ENV=production
+      # CVs are written here — matches the mounted `uploads` volume below.
+      - UPLOAD_DIR=/app/uploads
     depends_on:
       mongo:
         condition: service_healthy

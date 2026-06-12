@@ -11,5 +11,8 @@ dist-ssr
 __unconfig*
 todos.json
 
+# uploaded CVs (local dev — written to ./uploads when UPLOAD_DIR is unset)
+uploads/
+
 # typescript
 *.tsbuildinfo

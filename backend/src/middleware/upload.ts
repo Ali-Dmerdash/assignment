@@ -1,9 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, unlink, rename } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { RequestHandler } from "express";
 import multer from "multer";
-import { fileTypeFromBuffer } from "file-type";
+import { fileTypeFromFile } from "file-type";
 import { detectPdf } from "@file-type/pdf";
 import { detectCfbf } from "@file-type/cfbf";
 import {
@@ -25,20 +24,32 @@ declare global {
   }
 }
 
-/** Where validated CVs are written. Configurable; defaults to ./uploads. */
+/**
+ * Where CVs are written. In Docker this is the mounted `uploads` volume
+ * (compose sets UPLOAD_DIR=/app/uploads); locally it defaults to ./uploads.
+ */
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "uploads";
 /** Max accepted CV size (5 MB). */
 const MAX_CV_BYTES = 5 * 1024 * 1024;
 
 /**
- * Buffer the upload in memory (CVs are small) so we can inspect the actual
- * bytes before anything touches disk. The browser-supplied Content-Type and
- * filename are NOT trusted — see `validateCv`.
+ * Stream the upload straight to disk (the uploads volume) instead of buffering
+ * it in memory. The file is given a random, extension-less name — its real type
+ * isn't known until `validateCv` inspects the bytes.
  */
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_CV_BYTES, files: 1 },
+const storage = multer.diskStorage({
+  destination(_req, _file, cb) {
+    mkdir(UPLOAD_DIR, { recursive: true }).then(
+      () => cb(null, UPLOAD_DIR),
+      (err: unknown) => cb(err as Error, UPLOAD_DIR),
+    );
+  },
+  filename(_req, _file, cb) {
+    cb(null, randomUUID());
+  },
 });
+
+const upload = multer({ storage, limits: { fileSize: MAX_CV_BYTES, files: 1 } });
 
 /** Accept a single file under the `cv` form field. */
 export const uploadCv: RequestHandler = upload.single("cv");
@@ -72,10 +83,10 @@ function toCanonicalMime(mime: string): CvMimeType | undefined {
 }
 
 /**
- * Runs after `uploadCv`. Validates the buffered file by its real content, then
- * writes it to disk and exposes normalized metadata on `req.cvFile`. Responds
- * 400 when no file was sent or the content is not an accepted type. Nothing is
- * written to disk unless validation passes.
+ * Runs after `uploadCv`. Validates the file already written to the volume by its
+ * real content. On success it renames the file to carry the correct extension
+ * and exposes normalized metadata on `req.cvFile`. On failure (no file, or an
+ * unaccepted type) it deletes the file from the volume and responds 400.
  */
 export const validateCv: RequestHandler = async (req, res, next) => {
   if (!req.file) {
@@ -83,32 +94,35 @@ export const validateCv: RequestHandler = async (req, res, next) => {
     return;
   }
 
+  const savedPath = req.file.path;
   try {
-    // Inspect the actual bytes — ignores the client-supplied name and mimetype.
-    const detected = await fileTypeFromBuffer(req.file.buffer, {
+    // Inspect the actual bytes on disk — ignores the client name and mimetype.
+    const detected = await fileTypeFromFile(savedPath, {
       customDetectors: CV_DETECTORS,
     });
     const mimeType = detected ? toCanonicalMime(detected.mime) : undefined;
 
     if (!mimeType) {
+      await unlink(savedPath).catch(() => {}); // drop the rejected file
       res.status(400).json({ error: "CV must be a PDF, DOC, or DOCX file" });
       return;
     }
 
-    await mkdir(UPLOAD_DIR, { recursive: true });
-    const filename = `${randomUUID()}.${EXTENSION[mimeType]}`;
-    const fullPath = join(UPLOAD_DIR, filename);
-    await writeFile(fullPath, req.file.buffer);
+    // Now that the real type is known, give the file its correct extension.
+    const filename = `${req.file.filename}.${EXTENSION[mimeType]}`;
+    const finalPath = `${savedPath}.${EXTENSION[mimeType]}`;
+    await rename(savedPath, finalPath);
 
     req.cvFile = {
       filename,
       originalName: req.file.originalname,
       mimeType,
       size: req.file.size,
-      path: fullPath,
+      path: finalPath,
     };
     next();
   } catch (err) {
+    await unlink(savedPath).catch(() => {}); // best-effort cleanup on error
     next(err);
   }
 };
