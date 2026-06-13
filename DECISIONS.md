@@ -168,6 +168,37 @@ On the client ([`jobs.$jobId.tsx`](frontend/src/routes/jobs.$jobId.tsx)):
 
 ---
 
+## The Vercel deploy 404 — TanStack Start SPA emits `_shell.html`, not `index.html`
+
+Deploying the frontend to Vercel returned the platform **`404: NOT_FOUND`** on every
+route (Vercel's own 404, not the app's). The build itself succeeded, so it was a
+serve/routing problem, not a build one.
+
+- **Cause:** TanStack Start in SPA mode isn't a plain static site. `vite build`
+  emits `dist/client` (hashed assets + a prerendered shell named **`_shell.html`**,
+  not `index.html`) plus `dist/server` (a Nitro server). Vercel served the static
+  output, found no `index.html` at `/`, and 404'd.
+- **Fix:** a `frontend/vercel.json` that points Vercel at the client dir and falls
+  every non-file route back to the prerendered shell (which boots the SPA):
+
+  ```json
+  {
+    "outputDirectory": "dist/client",
+    "rewrites": [{ "source": "/(.*)", "destination": "/_shell.html" }]
+  }
+  ```
+
+  Hashed assets under `/assets/*` still resolve directly — Vercel matches real files
+  before applying rewrites — so only client routes (`/`, `/login`, `/jobs/:id`) get
+  the shell.
+- **Two gotchas next to it:** the Vercel project's **Root Directory** must be
+  `frontend` (so `dist/client` + `vercel.json` resolve), and `VITE_API_URL` is
+  inlined at **build** time — setting it after a build does nothing until you
+  redeploy. (Related: the deployed API also needs `CORS_ORIGIN` to equal the Vercel
+  origin *exactly* — a trailing slash there breaks every preflight.)
+
+---
+
 ## What I’d add or improve
 
 -   **The better auth design: in-memory access token + httpOnly refresh cookie.**  
