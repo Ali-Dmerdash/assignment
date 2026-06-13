@@ -9,20 +9,19 @@ spoofable, so neither is a real check. I validate the file's real content instea
 
 **How it works** ([`backend/src/middleware/upload.ts`](backend/src/middleware/upload.ts)):
 
-1. Multer uses **disk storage**, streaming the upload straight to the `uploads`
-   volume (compose sets `UPLOAD_DIR=/app/uploads`) under a random, extension-less
-   name — rather than buffering the whole file in RAM. This keeps uploads off the
-   heap and persists them on the mounted volume.
-2. `validateCv` runs `file-type`'s `fileTypeFromFile` on the saved file (it reads
-   only the bytes it needs). `file-type` reads magic numbers and, for container
-   formats, looks inside the container — so a `.docx` (a ZIP) is distinguished
-   from `.xlsx`/`.pptx` rather than seen as a generic ZIP.
+1. Multer uses **memory storage**, so the upload is buffered in RAM and *nothing
+   is written to disk until it passes validation*.
+2. `validateCv` runs `file-type`'s `fileTypeFromBuffer` on the buffer. `file-type`
+   reads magic numbers and, for container formats, looks inside the container —
+   so a `.docx` (a ZIP) is distinguished from `.xlsx`/`.pptx` rather than seen as
+   a generic ZIP.
 3. The detected MIME is checked against the model's `CV_MIME_TYPES` (single
    source of truth, also enforced as a schema `enum`). Only `application/pdf`,
-   `application/msword`, and the DOCX MIME pass; everything else is a 400 and the
-   just-written file is `unlink`ed from the volume.
-4. On success the file is renamed to carry its correct extension and normalized
-   metadata is attached to `req.cvFile` for the controller.
+   `application/msword`, and the DOCX MIME pass; everything else is a 400 — and a
+   rejected upload never touches the volume.
+4. On success the buffer is written to the `uploads` volume (compose sets
+   `UPLOAD_DIR=/app/uploads`) under a random name with the correct extension, and
+   normalized metadata is attached to `req.cvFile` for the controller.
 
 **Why two extra `file-type` plugins**
 
@@ -42,11 +41,10 @@ Plain magic-number detection has two blind spots that these official plugins clo
 
 **Trade-offs**
 
-- Disk storage means an invalid/spoofed file is briefly written to the volume
-  before `validateCv` rejects and deletes it. I chose this over memory storage so
-  large uploads don't sit on the heap and so files land directly on the mounted
-  volume; the cleanup keeps rejects from accumulating. (Memory storage would
-  avoid the transient write but hold the whole file in RAM.)
+- Memory storage holds the whole file in RAM while validating — fine at the 5 MB
+  cap, and the upside is that an invalid/spoofed file never reaches the volume
+  (no transient write to clean up). For much larger uploads I'd stream to a temp
+  file and validate that instead.
 - `@file-type/cfbf` recognizes a `.doc` via a known CLSID database; an exotic or
   corrupted CFB whose CLSID isn't listed would be rejected. I accept that —
   failing closed is the right default for an upload gate.
