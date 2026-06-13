@@ -12,7 +12,7 @@ dist-ssr
 coverage/
 
 # temp upload dir used by tests
-backend/test/.uploads-tmp/
+backend/test/uploads-tmp/
 .tanstack
 .wrangler
 .output
