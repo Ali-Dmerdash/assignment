@@ -24,7 +24,7 @@ todos.json
 uploads/
 
 # local production docker setup (not committed)
-backend/prod/
+backend/prod/.env
 
 # typescript
 *.tsbuildinfo

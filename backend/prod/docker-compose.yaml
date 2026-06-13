@@ -1,0 +1,22 @@
+name: ottonomi-assignment-prod
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: prod/Dockerfile
+    container_name: ottonomi-backend-prod
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGO_URI=${MONGO_URI_PROD}
+      - JWT_SECRET=${JWT_SECRET}
+      - NODE_ENV=production
+      - UPLOAD_DIR=/app/uploads
+      - CORS_ORIGIN=${CORS_ORIGIN}
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  uploads:
