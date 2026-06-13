@@ -6,8 +6,6 @@ import {
   type HydratedDocument,
 } from "mongoose";
 
-/** Accepted CV MIME types. The server validates the real MIME of the uploaded
- * bytes (not the file extension) and rejects anything not in this set. */
 export const CV_MIME_TYPES = [
   "application/pdf",
   "application/msword",
@@ -15,23 +13,18 @@ export const CV_MIME_TYPES = [
 ] as const;
 export type CvMimeType = (typeof CV_MIME_TYPES)[number];
 
-/**
- * Metadata for an uploaded CV. The file itself lives on disk/storage; we keep
- * the server-validated MIME type (from the actual content, not the extension).
- */
 export interface ICvFile {
-  filename: string; // stored (disk/storage) filename
-  originalName: string; // name as uploaded by the user
-  mimeType: CvMimeType; // server-validated MIME type (one of CV_MIME_TYPES)
-  size: number; // bytes
-  path: string; // location on disk (or storage key/URL)
+  filename: string;
+  originalName: string;
+  mimeType: CvMimeType;
+  size: number;
+  path: string;
 }
 
-/** Persisted shape of a job application. */
 export interface IApplication {
-  job: Types.ObjectId; // ref -> Job
-  applicant: Types.ObjectId; // ref -> User
-  name: string; // captured at submit time (prefilled from profile)
+  job: Types.ObjectId;
+  applicant: Types.ObjectId;
+  name: string;
   email: string;
   coverNote?: string;
   cv: ICvFile;
@@ -42,7 +35,6 @@ export interface IApplication {
 export type ApplicationModel = Model<IApplication>;
 export type ApplicationDocument = HydratedDocument<IApplication>;
 
-// Embedded subdocument (no own _id — it's owned entirely by the application).
 const cvSchema = new Schema<ICvFile>(
   {
     filename: { type: String, required: true },
@@ -76,8 +68,6 @@ const applicationSchema = new Schema<IApplication, ApplicationModel>(
   { timestamps: true },
 );
 
-// Deduplication: one application per applicant per job, enforced at the DB
-// level. A duplicate insert throws a E11000 error the controller maps to 409.
 applicationSchema.index({ job: 1, applicant: 1 }, { unique: true });
 
 export const Application = model<IApplication, ApplicationModel>(

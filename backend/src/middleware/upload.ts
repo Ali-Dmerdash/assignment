@@ -10,11 +10,8 @@ import {
   type CvMimeType,
   type ICvFile,
 } from "../models/Application.js";
+import { requireEnv } from "../config/env.js";
 
-/**
- * Module augmentation: after `validateCv` runs, the request carries normalized,
- * server-validated CV metadata for the controller to persist on the Application.
- */
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -24,19 +21,10 @@ declare global {
   }
 }
 
-/**
- * Where CVs are written. In Docker this is the mounted `uploads` volume
- * (compose sets UPLOAD_DIR=/app/uploads); locally it defaults to ./uploads.
- */
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "uploads";
+const UPLOAD_DIR = requireEnv("UPLOAD_DIR");
 /** Max accepted CV size (5 MB). */
 const MAX_CV_BYTES = 5 * 1024 * 1024;
 
-/**
- * Stream the upload straight to disk (the uploads volume) instead of buffering
- * it in memory. The file is given a random, extension-less name — its real type
- * isn't known until `validateCv` inspects the bytes.
- */
 const storage = multer.diskStorage({
   destination(_req, _file, cb) {
     mkdir(UPLOAD_DIR, { recursive: true }).then(
@@ -49,7 +37,10 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage, limits: { fileSize: MAX_CV_BYTES, files: 1 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_CV_BYTES, files: 1 },
+});
 
 /** Accept a single file under the `cv` form field. */
 export const uploadCv: RequestHandler = upload.single("cv");
