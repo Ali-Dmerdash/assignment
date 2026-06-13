@@ -90,3 +90,34 @@ that's the date applicants actually see it go live.
   publish endpoint loads the job, sets `status = "published"`, and `.save()`s it,
   rather than doing a query-level update. Keeping all status transitions on the
   document path is a deliberate constraint that also keeps this invariant honest.
+
+## 3. How I handled socket room cleanup on disconnect
+
+For the real-time "new application" notification, each connecting socket is
+authenticated from its handshake JWT and joins a **private room keyed by the user
+id** (`socket.join(user.id)`); the apply handler emits `new_application` to that
+room (`io.to(job.employer).emit(...)`). See
+[`backend/src/socket.ts`](backend/src/socket.ts).
+
+**The cleanup decision: I rely on Socket.io's built-in room lifecycle rather than
+tracking sockets myself.** When a socket disconnects, Socket.io automatically
+removes it from every room it had joined, and a room with no remaining members
+simply ceases to exist (rooms are ephemeral — they're not persisted anywhere).
+Because I key rooms by the user id and keep **no manual `Map<userId, socket>`
+registry**, there is nothing to tear down on disconnect and no way to leak a
+stale room or a dangling socket reference.
+
+This also handles the multi-connection case for free: an employer with several
+tabs open has multiple sockets in the same `user.id` room, each leaves
+independently when its tab closes, and the room disappears when the last one
+disconnects. Emitting to the room reaches all of their tabs.
+
+**Why not a manual registry?** The obvious alternative — storing `socketId` (or a
+set of them) per user in a map — would force me to delete entries on `disconnect`,
+handle the race where a user reconnects before the old socket's disconnect fires,
+and clean up on errors. Rooms make all of that the adapter's problem, so the only
+disconnect handling I need is *none*.
+
+**With more time:** for horizontal scaling I'd add the Redis adapter
+(`@socket.io/redis-adapter`) so rooms/emits work across multiple backend
+instances — the room-keyed design carries over unchanged.

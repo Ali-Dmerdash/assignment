@@ -5,8 +5,8 @@ filter, and apply. Monorepo with a Node/Express/MongoDB backend and a Vite/React
 frontend.
 
 > **Status:** the **backend is feature-complete** (auth, jobs lifecycle, search,
-> applications with CV validation) and **tested**. The real-time notification
-> (Socket.io) and the **frontend** are not finished yet — see
+> applications with CV validation, real-time notifications) and **tested**. The
+> **frontend** is not finished yet — see
 > [Status & what's incomplete](#status--whats-incomplete). Design decisions and
 > trade-offs are written up in [DECISIONS.md](DECISIONS.md).
 
@@ -55,6 +55,7 @@ All are required — there are no in-code defaults. See [`backend/.env.example`]
 | `MONGO_URI` | `mongodb://localhost:27017/jobboard` | MongoDB connection string (Atlas URI in deploy) |
 | `JWT_SECRET` | `<long random string>` | Secret used to sign/verify JWTs |
 | `UPLOAD_DIR` | `./uploads` | Directory where validated CVs are written |
+| `CORS_ORIGIN` | `http://localhost:3000` | Allowed frontend origin (REST + Socket.io); deployed URL in prod |
 
 ## Running locally
 
@@ -91,6 +92,19 @@ Key server-side rules (the client is not trusted): `datePosted` is set on first
 publish; only `published` jobs are visible/applicable; one application per
 applicant per job (unique index); CV type is validated from file **content**, not
 the extension (PDF / DOC / DOCX only).
+
+### Real-time (Socket.io)
+
+The Socket.io server shares the same HTTP port. A client connects with its JWT in
+the handshake and is placed in a private room keyed by its user id:
+
+```js
+io("http://localhost:5000", { auth: { token } });
+io.on("new_application", (payload) => { /* badge / toast */ });
+```
+
+When an application is saved, the backend emits **`new_application`** to the owning
+employer's room, so all of that employer's open tabs update without a refresh.
 
 ## Testing
 
@@ -136,13 +150,13 @@ connection string.
 **Done (backend):** JWT auth with two roles + bcrypt + route guards; job lifecycle
 (Draft → Published → Closed, close-not-delete, server-set `datePosted`);
 server-side pagination/filtering with keyword search; apply-once with content-based
-CV validation and a pre-upload gate; Jest test suite; Dockerized backend + Mongo.
+CV validation and a pre-upload gate; real-time `new_application` notifications over
+Socket.io (JWT-authenticated, room per employer); Jest test suite; Dockerized
+backend + Mongo.
 
 **Not finished:**
 
-- **Real-time notification (Socket.io).** The dependency is installed and there's a
-  `TODO` in the apply handler where the `new_application` event should be emitted to
-  the owning employer's room, but the Socket.io server isn't wired up yet.
 - **Frontend.** Currently a scaffold; the browse/apply and employer dashboards,
-  TanStack Query data layer, and role-based redirect guards are not implemented.
+  the TanStack Query data layer, the role-based redirect guards, and the toast/badge
+  that consumes the `new_application` socket event are not implemented.
 - **Live deployment.** Config is in place but the app isn't deployed.
