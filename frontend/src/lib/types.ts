@@ -43,6 +43,8 @@ export interface CvFile {
   path: string
 }
 
+export type ApplicationStatus = "pending" | "accepted" | "rejected"
+
 export interface Application {
   _id: string
   job: string
@@ -51,6 +53,7 @@ export interface Application {
   email: string
   coverNote?: string
   cv: CvFile
+  status: ApplicationStatus
   createdAt: string
   updatedAt: string
 }
@@ -65,4 +68,12 @@ export interface NewApplicationPayload {
   jobId: string
   jobTitle: string
   applicantName: string
+}
+
+// Sent to an applicant when the employer accepts/rejects their application.
+export interface ApplicationDecisionPayload {
+  applicationId: string
+  jobId: string
+  jobTitle: string
+  status: "accepted" | "rejected"
 }

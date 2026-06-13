@@ -59,18 +59,18 @@ export function Navbar() {
               Browse jobs
             </Button>
           ) : (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                nativeButton={false}
-                render={<Link to="/dashboard" />}
-              >
-                My jobs
-              </Button>
-              <NotificationBell />
-            </>
+            <Button
+              variant="ghost"
+              size="sm"
+              nativeButton={false}
+              render={<Link to="/dashboard" />}
+            >
+              My jobs
+            </Button>
           )}
+
+          {/* Both roles receive real-time notifications (applications / decisions). */}
+          <NotificationBell />
 
           <div className="ml-1 flex items-center gap-2">
             <Avatar className="size-8">

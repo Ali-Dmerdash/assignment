@@ -1,9 +1,13 @@
 import { io, type Socket } from "socket.io-client"
 import { API_URL } from "@/lib/api"
-import type { NewApplicationPayload } from "@/lib/types"
+import type {
+  ApplicationDecisionPayload,
+  NewApplicationPayload,
+} from "@/lib/types"
 
 interface ServerToClientEvents {
   new_application: (payload: NewApplicationPayload) => void
+  application_decision: (payload: ApplicationDecisionPayload) => void
 }
 
 let socket: Socket<ServerToClientEvents> | null = null

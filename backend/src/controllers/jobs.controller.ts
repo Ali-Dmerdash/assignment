@@ -6,7 +6,12 @@ import { Job, type IJob, type JobDocument } from "../models/Job.js";
 import { Application } from "../models/Application.js";
 import { User, type UserRole } from "../models/User.js";
 import type { AuthUser } from "../middleware/auth.js";
-import { emitNewApplication } from "../socket.js";
+import { emitApplicationDecision, emitNewApplication } from "../socket.js";
+
+// Decisions an employer can set on an application ("pending" is the initial
+// state, not something they set it back to).
+const APPLICATION_DECISIONS = ["accepted", "rejected"] as const;
+type ApplicationDecision = (typeof APPLICATION_DECISIONS)[number];
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
@@ -343,12 +348,64 @@ export const downloadCv: RequestHandler<{
 
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Length", String(size));
-    // inline so PDFs can be viewed in the browser; non-viewable types download.
     res.setHeader(
       "Content-Disposition",
       `inline; filename*=UTF-8''${encodeURIComponent(originalName)}`,
     );
     createReadStream(filePath).on("error", next).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * PATCH /api/jobs/:id/applicants/:applicationId  (employer, own job)
+ */
+export const decideApplication: RequestHandler<{
+  id: string;
+  applicationId: string;
+}> = async (req, res, next) => {
+  try {
+    const user = requireEmployer(req, res);
+    if (!user) return;
+
+    const status = req.body?.status as unknown;
+    if (!APPLICATION_DECISIONS.includes(status as ApplicationDecision)) {
+      res
+        .status(400)
+        .json({ error: "status must be 'accepted' or 'rejected'" });
+      return;
+    }
+
+    const job = await loadOwnedJob(req.params.id, user.id, res);
+    if (!job) return;
+
+    if (!isValidObjectId(req.params.applicationId)) {
+      res.status(404).json({ error: "Application not found" });
+      return;
+    }
+
+    const application = await Application.findOne({
+      _id: req.params.applicationId,
+      job: job._id,
+    });
+    if (!application) {
+      res.status(404).json({ error: "Application not found" });
+      return;
+    }
+
+    application.status = status as ApplicationDecision;
+    await application.save();
+
+    // Notify the applicant's room without a refresh.
+    emitApplicationDecision(application.applicant.toString(), {
+      applicationId: application.id,
+      jobId: job.id,
+      jobTitle: job.title,
+      status: status as ApplicationDecision,
+    });
+
+    res.json({ application });
   } catch (err) {
     next(err);
   }

@@ -16,7 +16,7 @@ import {
   notificationsStore,
 } from "@/store/notifications"
 
-/** Employer-only: bell with an unread badge + a panel of recent applications. */
+/** Bell with an unread badge + a panel of recent real-time notifications. */
 export function NotificationBell() {
   const { items, unread } = useStore(notificationsStore, (s) => s)
 
@@ -59,23 +59,38 @@ export function NotificationBell() {
             No notifications yet.
           </p>
         ) : (
-          items.map((n) => (
-            <DropdownMenuItem
-              key={n.id}
-              render={
-                <Link
-                  to="/dashboard/jobs/$jobId/applicants"
-                  params={{ jobId: n.jobId }}
-                />
-              }
-              className="flex-col items-start gap-0.5"
-            >
-              <span className="text-sm font-medium">{n.applicantName}</span>
-              <span className="text-muted-foreground text-xs">
-                applied to {n.jobTitle}
-              </span>
-            </DropdownMenuItem>
-          ))
+          items.map((n) =>
+            n.kind === "new_application" ? (
+              <DropdownMenuItem
+                key={n.id}
+                render={
+                  <Link
+                    to="/dashboard/jobs/$jobId/applicants"
+                    params={{ jobId: n.jobId }}
+                  />
+                }
+                className="flex-col items-start gap-0.5"
+              >
+                <span className="text-sm font-medium">{n.applicantName}</span>
+                <span className="text-muted-foreground text-xs">
+                  applied to {n.jobTitle}
+                </span>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem
+                key={n.id}
+                render={<Link to="/jobs/$jobId" params={{ jobId: n.jobId }} />}
+                className="flex-col items-start gap-0.5"
+              >
+                <span className="text-sm font-medium">
+                  Application {n.status}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  Your application for {n.jobTitle} was {n.status}
+                </span>
+              </DropdownMenuItem>
+            ),
+          )
         )}
       </DropdownMenuContent>
     </DropdownMenu>

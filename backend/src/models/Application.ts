@@ -13,6 +13,13 @@ export const CV_MIME_TYPES = [
 ] as const;
 export type CvMimeType = (typeof CV_MIME_TYPES)[number];
 
+export const APPLICATION_STATUSES = [
+  "pending",
+  "accepted",
+  "rejected",
+] as const;
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+
 export interface ICvFile {
   filename: string;
   originalName: string;
@@ -28,6 +35,7 @@ export interface IApplication {
   email: string;
   coverNote?: string;
   cv: ICvFile;
+  status: ApplicationStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,6 +72,12 @@ const applicationSchema = new Schema<IApplication, ApplicationModel>(
     email: { type: String, required: true, lowercase: true, trim: true },
     coverNote: { type: String, trim: true },
     cv: { type: cvSchema, required: true },
+    status: {
+      type: String,
+      enum: APPLICATION_STATUSES,
+      required: true,
+      default: "pending",
+    },
   },
   { timestamps: true },
 );

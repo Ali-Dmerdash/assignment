@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { verifyToken, type AuthUser } from "./middleware/auth.js";
+import type { ApplicationStatus } from "./models/Application.js";
 import { requireEnv } from "./config/env.js";
 
 /** Payload sent to an employer's room when one of their jobs gets an application. */
@@ -11,8 +12,17 @@ export interface NewApplicationPayload {
   applicantName: string;
 }
 
+/** Payload sent to an applicant's room when the employer accepts/rejects them. */
+export interface ApplicationDecisionPayload {
+  applicationId: string;
+  jobId: string;
+  jobTitle: string;
+  status: Extract<ApplicationStatus, "accepted" | "rejected">;
+}
+
 interface ServerToClientEvents {
   new_application: (payload: NewApplicationPayload) => void;
+  application_decision: (payload: ApplicationDecisionPayload) => void;
 }
 interface SocketData {
   user: AuthUser;
@@ -60,4 +70,11 @@ export function emitNewApplication(
   payload: NewApplicationPayload,
 ): void {
   io?.to(employerId).emit("new_application", payload);
+}
+
+export function emitApplicationDecision(
+  applicantId: string,
+  payload: ApplicationDecisionPayload,
+): void {
+  io?.to(applicantId).emit("application_decision", payload);
 }

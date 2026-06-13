@@ -8,6 +8,7 @@ import {
   closeJob,
   listApplicants,
   downloadCv,
+  decideApplication,
   ensureCanApply,
   applyToJob,
 } from "../controllers/jobs.controller.js";
@@ -47,6 +48,12 @@ router.get(
   authenticate,
   requireRole("employer"),
   downloadCv,
+);
+router.patch(
+  "/:id/applicants/:applicationId",
+  authenticate,
+  requireRole("employer"),
+  decideApplication,
 );
 
 export default router;

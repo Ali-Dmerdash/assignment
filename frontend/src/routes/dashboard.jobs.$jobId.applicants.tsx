@@ -14,6 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CvLink } from "@/components/CvLink"
+import { ApplicantDecision } from "@/components/ApplicantDecision"
 import { jobApplicantsQuery, jobDetailQuery } from "@/lib/queries"
 import { requireRole } from "@/lib/guards"
 import { formatDate } from "@/lib/format"
@@ -76,6 +77,7 @@ function Applicants() {
                 <TableHead>Cover note</TableHead>
                 <TableHead>CV</TableHead>
                 <TableHead>Applied</TableHead>
+                <TableHead>Decision</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -104,6 +106,9 @@ function Applicants() {
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {formatDate(app.createdAt)}
+                  </TableCell>
+                  <TableCell>
+                    <ApplicantDecision jobId={jobId} application={app} />
                   </TableCell>
                 </TableRow>
               ))}

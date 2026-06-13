@@ -4,19 +4,22 @@ import { toast } from "sonner"
 import { authStore } from "@/store/auth"
 import { connectSocket, disconnectSocket } from "@/lib/socket"
 import { pushNotification } from "@/store/notifications"
-import type { NewApplicationPayload } from "@/lib/types"
+import type {
+  ApplicationDecisionPayload,
+  NewApplicationPayload,
+} from "@/lib/types"
 
 /**
- * Headless component: keeps a single authenticated socket alive for the logged-in
- * employer and turns `new_application` events into a toast + a notifications-store
- * entry (which drives the navbar badge). Applicants get no socket — only
- * employers receive room events.
+ * Headless component: keeps a single authenticated socket alive for any logged-in
+ * user and turns room events into a toast + a notifications-store entry (which
+ * drives the navbar badge). The server only emits to the relevant room, so an
+ * employer receives `new_application` and an applicant `application_decision`.
  */
 export function SocketManager() {
   const { token, user } = useStore(authStore, (s) => s)
 
   useEffect(() => {
-    if (!token || user?.role !== "employer") {
+    if (!token || !user) {
       disconnectSocket()
       return
     }
@@ -24,17 +27,38 @@ export function SocketManager() {
     const socket = connectSocket(token)
 
     const onNewApplication = (payload: NewApplicationPayload) => {
-      pushNotification(payload, Date.now())
+      pushNotification({
+        kind: "new_application",
+        jobId: payload.jobId,
+        jobTitle: payload.jobTitle,
+        applicantName: payload.applicantName,
+      })
       toast.success("New application", {
         description: `${payload.applicantName} applied to "${payload.jobTitle}"`,
       })
     }
 
+    const onDecision = (payload: ApplicationDecisionPayload) => {
+      pushNotification({
+        kind: "application_decision",
+        jobId: payload.jobId,
+        jobTitle: payload.jobTitle,
+        status: payload.status,
+      })
+      const accepted = payload.status === "accepted"
+      const notify = accepted ? toast.success : toast.info
+      notify(accepted ? "Application accepted" : "Application rejected", {
+        description: `Your application for "${payload.jobTitle}" was ${payload.status}.`,
+      })
+    }
+
     socket.on("new_application", onNewApplication)
+    socket.on("application_decision", onDecision)
     return () => {
       socket.off("new_application", onNewApplication)
+      socket.off("application_decision", onDecision)
     }
-  }, [token, user?.role])
+  }, [token, user?.id])
 
   return null
 }

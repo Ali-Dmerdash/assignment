@@ -105,6 +105,17 @@ export function applyToJob(jobId: string, body: FormData) {
   })
 }
 
+export function decideApplication(
+  jobId: string,
+  applicationId: string,
+  status: "accepted" | "rejected",
+) {
+  return apiFetch<{ application: Application }>(
+    `/api/jobs/${jobId}/applicants/${applicationId}`,
+    { method: "PATCH", json: { status } },
+  )
+}
+
 // ---- Auth ------------------------------------------------------------------
 
 export function login(body: { email: string; password: string }) {
