@@ -244,8 +244,6 @@ serve/routing problem, not a build one.
   on each decision via an email service like Resend, so the applicant is notified
   even when offline — no socket needed.
 
-- **Downloadable CVs.** The backend stores the file but exposes no download route,
-
 - so the applicants view shows metadata (name, type, size) rather than a working  
   link. I’d add an owner-guarded `GET /api/applications/:id/cv` that streams the  
   file with the right `Content-Type`.
