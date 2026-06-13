@@ -4,6 +4,12 @@ dist
 dist-ssr
 *.local
 .env
+
+# Claude Code session/workspace dir
+.claude/
+
+# test coverage output
+coverage/
 .tanstack
 .wrangler
 .output
