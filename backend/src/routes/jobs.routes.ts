@@ -12,6 +12,7 @@ import {
 } from "../controllers/jobs.controller.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { uploadCv, validateCv } from "../middleware/upload.js";
+import { applyRateLimiter } from "../middleware/rateLimit.js";
 
 const router: Router = Router();
 
@@ -21,6 +22,7 @@ router.post(
   "/:id/apply",
   authenticate,
   requireRole("applicant"),
+  applyRateLimiter,
   ensureCanApply,
   uploadCv,
   validateCv,
