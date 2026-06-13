@@ -1,3 +1,4 @@
+import { describe, it, expect, jest } from "@jest/globals";
 import type { Request, Response, NextFunction } from "express";
 import { signToken, authenticate, requireRole } from "../src/middleware/auth.js";
 
