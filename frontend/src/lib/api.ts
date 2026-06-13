@@ -67,3 +67,33 @@ export async function apiFetch<T>(
 
   return data as T
 }
+
+/**
+ * Fetch a CV as a Blob (the endpoint streams a file, not JSON). Sends the Bearer
+ * token like apiFetch — a plain <a href> can't, since auth is a header.
+ */
+export async function fetchCv(
+  jobId: string,
+  applicationId: string,
+): Promise<Blob> {
+  const token = getToken()
+  const res = await fetch(
+    `${API_URL}/api/jobs/${jobId}/applicants/${applicationId}/cv`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+
+  if (res.status === 401 && token) clearSession()
+
+  if (!res.ok) {
+    let message = `Request failed (${res.status})`
+    try {
+      const data = await res.json()
+      if (data?.error) message = String(data.error)
+    } catch {
+      // non-JSON error body — keep the generic message
+    }
+    throw new ApiError(res.status, message)
+  }
+
+  return res.blob()
+}

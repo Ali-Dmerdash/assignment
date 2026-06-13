@@ -7,6 +7,7 @@ import {
   updateJob,
   closeJob,
   listApplicants,
+  downloadCv,
   ensureCanApply,
   applyToJob,
 } from "../controllers/jobs.controller.js";
@@ -40,6 +41,12 @@ router.get(
   authenticate,
   requireRole("employer"),
   listApplicants,
+);
+router.get(
+  "/:id/applicants/:applicationId/cv",
+  authenticate,
+  requireRole("employer"),
+  downloadCv,
 );
 
 export default router;

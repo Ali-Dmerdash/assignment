@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { IconArrowLeft, IconFileText } from "@tabler/icons-react"
+import { IconArrowLeft } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -11,19 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { CvLink } from "@/components/CvLink"
 import { jobApplicantsQuery, jobDetailQuery } from "@/lib/queries"
 import { requireRole } from "@/lib/guards"
-import { formatBytes, formatDate } from "@/lib/format"
-
-const CV_LABEL: Record<string, string> = {
-  "application/pdf": "PDF",
-  "application/msword": "DOC",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-    "DOCX",
-}
+import { formatDate } from "@/lib/format"
 
 export const Route = createFileRoute("/dashboard/jobs/$jobId/applicants")({
   beforeLoad: () => requireRole("employer"),
@@ -107,21 +100,7 @@ function Applicants() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <span
-                      className="flex items-center gap-1.5 text-sm"
-                      title={`Stored on the server as ${app.cv.filename}`}
-                    >
-                      <IconFileText className="text-muted-foreground size-4" />
-                      <span className="max-w-40 truncate">
-                        {app.cv.originalName}
-                      </span>
-                      <Badge variant="secondary" className="text-[10px]">
-                        {CV_LABEL[app.cv.mimeType] ?? "FILE"}
-                      </Badge>
-                      <span className="text-muted-foreground text-xs">
-                        {formatBytes(app.cv.size)}
-                      </span>
-                    </span>
+                    <CvLink jobId={jobId} application={app} />
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {formatDate(app.createdAt)}

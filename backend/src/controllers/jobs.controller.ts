@@ -1,6 +1,7 @@
-import { unlink } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { stat, unlink } from "node:fs/promises";
 import type { RequestHandler, Request, Response } from "express";
-import type { QueryFilter } from "mongoose";
+import { isValidObjectId, type QueryFilter } from "mongoose";
 import { Job, type IJob, type JobDocument } from "../models/Job.js";
 import { Application } from "../models/Application.js";
 import { User, type UserRole } from "../models/User.js";
@@ -299,6 +300,55 @@ export const listApplicants: RequestHandler<{ id: string }> = async (
       .lean();
 
     res.json({ data: applications, total: applications.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/jobs/:id/applicants/:applicationId/cv  (employer, own job)
+ */
+export const downloadCv: RequestHandler<{
+  id: string;
+  applicationId: string;
+}> = async (req, res, next) => {
+  try {
+    const user = requireEmployer(req, res);
+    if (!user) return;
+
+    const job = await loadOwnedJob(req.params.id, user.id, res);
+    if (!job) return;
+
+    if (!isValidObjectId(req.params.applicationId)) {
+      res.status(404).json({ error: "Application not found" });
+      return;
+    }
+
+    const application = await Application.findOne({
+      _id: req.params.applicationId,
+      job: job._id,
+    }).lean();
+    if (!application) {
+      res.status(404).json({ error: "Application not found" });
+      return;
+    }
+
+    const { path: filePath, mimeType, originalName, size } = application.cv;
+    try {
+      await stat(filePath);
+    } catch {
+      res.status(404).json({ error: "CV file is no longer available" });
+      return;
+    }
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", String(size));
+    // inline so PDFs can be viewed in the browser; non-viewable types download.
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename*=UTF-8''${encodeURIComponent(originalName)}`,
+    );
+    createReadStream(filePath).on("error", next).pipe(res);
   } catch (err) {
     next(err);
   }
