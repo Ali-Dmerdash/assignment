@@ -5,12 +5,12 @@ import { Job, type IJob, type JobDocument } from "../models/Job.js";
 import { Application } from "../models/Application.js";
 import { User, type UserRole } from "../models/User.js";
 import type { AuthUser } from "../middleware/auth.js";
+import { emitNewApplication } from "../socket.js";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 
-// Statuses an employer may set via create/edit; closing is a separate endpoint.
 const EDITABLE_STATUSES = ["draft", "published"] as const;
 
 function escapeRegex(input: string): string {
@@ -146,7 +146,6 @@ export const createJob: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    // employer comes from the token — never trusted from the body.
     const job = await Job.create({
       title,
       company,
@@ -290,9 +289,6 @@ export const applyToJob: RequestHandler<{ id: string }> = async (
   res,
   next,
 ) => {
-  // The CV was already written to disk by validateCv. If we don't end up
-  // creating the application (wrong role, non-published job, duplicate, error),
-  // remove that file so failed applies don't leave orphaned uploads.
   let created = false;
   try {
     const user = requireApplicant(req, res);
@@ -308,13 +304,11 @@ export const applyToJob: RequestHandler<{ id: string }> = async (
       res.status(404).json({ error: "Job not found" });
       return;
     }
-    // Only published jobs accept applications — enforced server-side.
     if (job.status !== "published") {
       res.status(403).json({ error: "This job is not open for applications" });
       return;
     }
 
-    // Name/email come from the applicant's profile, not the client.
     const applicant = await User.findById(user.id);
     if (!applicant) {
       res.status(401).json({ error: "Authentication required" });
@@ -336,12 +330,15 @@ export const applyToJob: RequestHandler<{ id: string }> = async (
     });
     created = true;
 
-    // TODO: emit "new_application" to the owning employer's room once Socket.io
-    // is wired in server.ts (room keyed by job.employer).
+    emitNewApplication(job.employer.toString(), {
+      applicationId: application.id,
+      jobId: job.id,
+      jobTitle: job.title,
+      applicantName: applicant.name,
+    });
 
     res.status(201).json({ application });
   } catch (err) {
-    // Unique {job, applicant} index → this applicant already applied here.
     if (isDuplicateKeyError(err)) {
       res.status(409).json({ error: "You have already applied to this job" });
       return;

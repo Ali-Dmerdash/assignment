@@ -28,6 +28,18 @@ export function signToken(user: AuthUser): string {
   });
 }
 
+export function verifyToken(token: string): AuthUser | null {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (typeof decoded === "string" || !decoded.sub || !("role" in decoded)) {
+      return null;
+    }
+    return { id: decoded.sub, role: decoded.role as UserRole };
+  } catch {
+    return null;
+  }
+}
+
 export const authenticate: RequestHandler = (req, res, next) => {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) {
@@ -35,19 +47,13 @@ export const authenticate: RequestHandler = (req, res, next) => {
     return;
   }
 
-  const token = header.slice("Bearer ".length).trim();
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    if (typeof decoded === "string" || !decoded.sub || !("role" in decoded)) {
-      res.status(401).json({ error: "Invalid token" });
-      return;
-    }
-    req.user = { id: decoded.sub, role: decoded.role as UserRole };
-    next();
-  } catch {
+  const user = verifyToken(header.slice("Bearer ".length).trim());
+  if (!user) {
     res.status(401).json({ error: "Invalid or expired token" });
+    return;
   }
+  req.user = user;
+  next();
 };
 
 export function requireRole(...roles: UserRole[]): RequestHandler {

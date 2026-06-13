@@ -1,17 +1,20 @@
 import "dotenv/config";
 
+import { createServer } from "node:http";
 import express, { type ErrorRequestHandler } from "express";
 import cors from "cors";
 import multer from "multer";
 import { connectDB, disconnectDB } from "./config/db.js";
 import { requireEnv } from "./config/env.js";
+import { initSocket } from "./socket.js";
 import authRoutes from "./routes/auth.routes.js";
 import jobRoutes from "./routes/jobs.routes.js";
 
 const PORT = Number(requireEnv("PORT"));
+const CORS_ORIGIN = requireEnv("CORS_ORIGIN");
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
@@ -33,12 +36,16 @@ app.use(errorHandler);
 
 async function start(): Promise<void> {
   await connectDB();
-  const server = app.listen(PORT, () => {
+
+  const httpServer = createServer(app);
+  const io = initSocket(httpServer);
+
+  httpServer.listen(PORT, () => {
     console.log(`[server] listening on http://localhost:${PORT}`);
   });
 
   const shutdown = () => {
-    server.close(() => {
+    io.close(() => {
       void disconnectDB().finally(() => process.exit(0));
     });
   };
