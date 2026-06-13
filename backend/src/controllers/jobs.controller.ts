@@ -1,3 +1,4 @@
+import { unlink } from "node:fs/promises";
 import type { RequestHandler, Request, Response } from "express";
 import type { QueryFilter } from "mongoose";
 import { Job, type IJob, type JobDocument } from "../models/Job.js";
@@ -251,6 +252,37 @@ export const listApplicants: RequestHandler<{ id: string }> = async (
 };
 
 /**
+ * Pre-upload gate for POST /api/jobs/:id/apply.
+ */
+export const ensureCanApply: RequestHandler<{ id: string }> = async (
+  req,
+  res,
+  next,
+) => {
+  try {
+    const user = requireApplicant(req, res);
+    if (!user) return;
+
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    if (job.status !== "published") {
+      res.status(403).json({ error: "This job is not open for applications" });
+      return;
+    }
+    if (await Application.exists({ job: job._id, applicant: user.id })) {
+      res.status(409).json({ error: "You have already applied to this job" });
+      return;
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * POST /api/jobs/:id/apply  (applicant) — apply once to a published job.
  */
 export const applyToJob: RequestHandler<{ id: string }> = async (
@@ -258,6 +290,10 @@ export const applyToJob: RequestHandler<{ id: string }> = async (
   res,
   next,
 ) => {
+  // The CV was already written to disk by validateCv. If we don't end up
+  // creating the application (wrong role, non-published job, duplicate, error),
+  // remove that file so failed applies don't leave orphaned uploads.
+  let created = false;
   try {
     const user = requireApplicant(req, res);
     if (!user) return;
@@ -298,6 +334,7 @@ export const applyToJob: RequestHandler<{ id: string }> = async (
       coverNote,
       cv: req.cvFile,
     });
+    created = true;
 
     // TODO: emit "new_application" to the owning employer's room once Socket.io
     // is wired in server.ts (room keyed by job.employer).
@@ -310,5 +347,9 @@ export const applyToJob: RequestHandler<{ id: string }> = async (
       return;
     }
     next(err);
+  } finally {
+    if (!created && req.cvFile) {
+      await unlink(req.cvFile.path).catch(() => {});
+    }
   }
 };
