@@ -121,6 +121,60 @@ export const listJobs: RequestHandler = async (req, res, next) => {
 };
 
 /**
+ * GET /api/jobs/mine  (employer)
+ */
+export const listMyJobs: RequestHandler = async (req, res, next) => {
+  try {
+    const user = requireEmployer(req, res);
+    if (!user) return;
+
+    const jobs = await Job.find({ employer: user.id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ data: jobs, total: jobs.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/jobs/:id  (authenticated) — fetch a single job.
+ */
+export const getJob: RequestHandler<{ id: string }> = async (
+  req,
+  res,
+  next,
+) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+
+    const job = await Job.findById(req.params.id).lean();
+    const isOwner = job != null && job.employer.toString() === req.user.id;
+
+    if (!job || (job.status !== "published" && !isOwner)) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+
+    const applied =
+      req.user.role === "applicant"
+        ? (await Application.exists({
+            job: job._id,
+            applicant: req.user.id,
+          })) !== null
+        : false;
+
+    res.json({ job, applied });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * POST /api/jobs  (employer) — create a job they own.
  */
 export const createJob: RequestHandler = async (req, res, next) => {

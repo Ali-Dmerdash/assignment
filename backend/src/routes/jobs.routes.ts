@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
   listJobs,
+  listMyJobs,
+  getJob,
   createJob,
   updateJob,
   closeJob,
@@ -13,11 +15,8 @@ import { uploadCv, validateCv } from "../middleware/upload.js";
 
 const router: Router = Router();
 
-// Applicants browse published jobs.
 router.get("/", authenticate, requireRole("applicant"), listJobs);
 
-// Applicants apply once to a published job. ensureCanApply rejects duplicates /
-// closed jobs BEFORE the CV is uploaded, so no file is processed for those.
 router.post(
   "/:id/apply",
   authenticate,
@@ -28,7 +27,9 @@ router.post(
   applyToJob,
 );
 
-// Employers manage their own jobs.
+router.get("/mine", authenticate, requireRole("employer"), listMyJobs);
+
+router.get("/:id", authenticate, getJob);
 router.post("/", authenticate, requireRole("employer"), createJob);
 router.put("/:id", authenticate, requireRole("employer"), updateJob);
 router.patch("/:id/close", authenticate, requireRole("employer"), closeJob);
