@@ -1,0 +1,11 @@
+{
+  // Type-checks the test suite (and source) with Jest globals available.
+  // ts-jest uses its own inline config; this is for the IDE and `tsc --noEmit`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "jest"],
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

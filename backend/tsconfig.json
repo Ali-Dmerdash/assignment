@@ -41,5 +41,7 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true
-  }
+  },
+  // Build compiles app source only; tests are type-checked via tsconfig.test.json.
+  "include": ["src"]
 }
