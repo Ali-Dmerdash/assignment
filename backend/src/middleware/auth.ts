@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express";
-import * as jwt from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import { requireEnv } from "../config/env.js";
 
 export type UserRole = "employer" | "applicant";
