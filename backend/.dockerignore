@@ -18,6 +18,7 @@ Dockerfile
 .dockerignore
 docker-compose.yaml
 docker-compose.yml
+prod/
 
 # VCS / editor / logs
 .git

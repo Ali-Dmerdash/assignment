@@ -3,7 +3,7 @@ name: ottonomi-assignment
 services:
   mongo:
     image: mongo:7
-    container_name: mongo
+    container_name: ottonomi-mongo
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: backend
+    container_name: ottonomi-backend
     restart: unless-stopped
     ports:
       - "5000:5000"
@@ -27,13 +27,12 @@ services:
       - PORT=5000
       - MONGO_URI=mongodb://mongo:27017/jobboard
       - JWT_SECRET=${JWT_SECRET}
-      - NODE_ENV=production
-      # CVs are written here — matches the mounted `uploads` volume below.
       - UPLOAD_DIR=/app/uploads
     depends_on:
       mongo:
         condition: service_healthy
     volumes:
+      - ./src:/app/src
       - uploads:/app/uploads
 
 volumes:

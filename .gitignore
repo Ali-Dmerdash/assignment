@@ -3,7 +3,7 @@ node_modules
 dist
 dist-ssr
 *.local
-.env*
+.env
 .tanstack
 .wrangler
 .output
@@ -13,6 +13,9 @@ todos.json
 
 # uploaded CVs (local dev — written to ./uploads when UPLOAD_DIR is unset)
 uploads/
+
+# local production docker setup (not committed)
+backend/prod/
 
 # typescript
 *.tsbuildinfo
