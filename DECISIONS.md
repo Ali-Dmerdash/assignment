@@ -1,123 +1,202 @@
-# Decisions
+## Why I added two `file-type` plugins (`@file-type/cfbf` and `@file-type/pdf`)
 
-## 1. CV upload validation: trust the bytes, not the extension or `Content-Type`
+CV validation is content-based: `validateCv` runs `file-type`’s  
+`fileTypeFromBuffer` over the uploaded bytes and only accepts a real PDF / DOC /  
+DOCX. ([`backend/src/middleware/upload.ts`](backend/src/middleware/upload.ts)) But  
+plain magic-number detection has two blind spots that would let the wrong file  
+through as an “accepted” type — each plugin closes one:
 
-The assignment requires rejecting CVs whose *actual* type isn't PDF/DOC/DOCX,
-"regardless of the file extension." A browser-sent `Content-Type` (what Multer's
-`fileFilter` sees) and the filename are both client-controlled and trivially
-spoofable, so neither is a real check. I validate the file's real content instead.
+-   **`@file-type/cfbf`** — a legacy `.doc` is an OLE2/CFB compound file, the *same  
+    container format* as `.xls`, `.ppt`, `.msi`, etc. Without the plugin, detection  
+    can only say “this is a CFB file” (`application/x-cfb`) and can’t tell a Word  
+    document from an Excel sheet — so an `.xls` renamed to `.doc` would look like a  
+    generic Office container and slip through. The plugin reads the **CLSID** (the  
+    class id in the compound file’s root entry) and maps it to the specific app, so  
+    a real Word doc reports `application/msword`, while that renamed `.xls` reports  
+    `application/vnd.ms-excel` and is rejected. This is what actually resolves the  
+    DOC ambiguity.
+-   **`@file-type/pdf`** — Adobe Illustrator `.ai` files are technically PDFs and  
+    carry the same `%PDF` signature, so naive magic-number detection happily accepts  
+    them as a PDF. The plugin looks deeper into the PDF’s internal metadata  
+    (producer/creator) and reports `application/illustrator`, so an `.ai` dressed up  
+    as a CV is rejected.
 
-**How it works** ([`backend/src/middleware/upload.ts`](backend/src/middleware/upload.ts)):
+---
 
-1. Multer uses **memory storage**, so the upload is buffered in RAM and *nothing
-   is written to disk until it passes validation*.
-2. `validateCv` runs `file-type`'s `fileTypeFromBuffer` on the buffer. `file-type`
-   reads magic numbers and, for container formats, looks inside the container —
-   so a `.docx` (a ZIP) is distinguished from `.xlsx`/`.pptx` rather than seen as
-   a generic ZIP.
-3. The detected MIME is checked against the model's `CV_MIME_TYPES` (single
-   source of truth, also enforced as a schema `enum`). Only `application/pdf`,
-   `application/msword`, and the DOCX MIME pass; everything else is a 400 — and a
-   rejected upload never touches the volume.
-4. On success the buffer is written to the `uploads` volume (compose sets
-   `UPLOAD_DIR=/app/uploads`) under a random name with the correct extension, and
-   normalized metadata is attached to `req.cvFile` for the controller.
+## Why “Date Posted” is set when a job is first published, not when it’s created
 
-**Why two extra `file-type` plugins**
+The spec wants `datePosted` generated server-side and not trusted from the client.  
+The easy reading is “set it at creation,” but that’s wrong here: a job starts as a  
+**Draft** that nobody can see. A draft created Monday and published Friday should  
+read as posted **Friday** — the day applicants actually see it. ([`backend/src/models/Job.ts`](backend/src/models/Job.ts))
 
-Plain magic-number detection has two blind spots that these official plugins close:
+-   `datePosted` is optional with no default, so a draft simply doesn’t have one.
+-   A `pre("save")` hook stamps it the first time `status === "published"`, guarded  
+    by `!this.datePosted` so it’s set **once** and never moves on later saves (e.g.  
+    closing the job).
+-   It’s always `new Date()` on the server, so the client can’t forge it.
+-   Caveat: `pre("save")` hooks only run on `.save()`/`.create()`, not on  
+    `findOneAndUpdate`. So publishing loads the doc, sets the status, and saves it —  
+    I keep all status changes on the document path on purpose, which also keeps this  
+    rule honest.
 
-- **`@file-type/cfbf`** — legacy `.doc` is an OLE2/CFB compound file, a container
-  shared by `.doc`, `.xls`, `.ppt`, `.msi`, etc. Generic detection can only say
-  "this is a CFB file" (`application/x-cfb`), which can't tell a Word doc from an
-  Excel sheet. This plugin reads the root entry's **CLSID** and maps it to the
-  specific application, so a real Word document reports `application/msword`,
-  while an `.xls` renamed to `.doc` reports `application/vnd.ms-excel` and is
-  rejected. This is what actually resolves the CFB ambiguity.
-- **`@file-type/pdf`** — Adobe Illustrator `.ai` files are technically PDFs and
-  share the `%PDF` signature, so naive detection lets them through as PDF. This
-  plugin inspects the internal PDF structure (producer/creator metadata) and
-  reports `application/illustrator` for them, so they're rejected.
+---
 
-**Trade-offs**
+## How I handle socket room cleanup when a user disconnects
 
-- Memory storage holds the whole file in RAM while validating — fine at the 5 MB
-  cap, and the upside is that an invalid/spoofed file never reaches the volume
-  (no transient write to clean up). For much larger uploads I'd stream to a temp
-  file and validate that instead.
-- `@file-type/cfbf` recognizes a `.doc` via a known CLSID database; an exotic or
-  corrupted CFB whose CLSID isn't listed would be rejected. I accept that —
-  failing closed is the right default for an upload gate.
+Each socket authenticates from its JWT and joins a **private room keyed by the  
+user id**; the apply handler emits `new_application` to that room. ([`backend/src/socket.ts`](backend/src/socket.ts))
 
-**With more time**
+The decision: **I let [Socket.io](http://Socket.io)’s built-in room lifecycle do the cleanup instead  
+of tracking sockets myself.**
 
-- Run a virus/malware scan (e.g. ClamAV) on accepted files.
-- Move storage off the app's local disk (S3/GridFS) — see the deployment note,
-  since the host filesystem is ephemeral.
+-   When a socket disconnects, [Socket.io](http://Socket.io) removes it from every room automatically,  
+    and an empty room just stops existing (rooms aren’t persisted).
+-   Because I key rooms by user id and keep **no manual `Map<userId, socket>`**,  
+    there’s nothing to tear down — no stale rooms, no dangling references.
+-   Multi-tab works for free: an employer’s open tabs are several sockets in the  
+    same room; each leaves when its tab closes, and an emit reaches all of them.
 
-## 2. `datePosted` is stamped at first publish, not at creation
+---
 
-The spec says "Date Posted is auto-generated server-side — not trusted from the
-client." The easy reading is "set it when the row is created," but that's wrong
-for this lifecycle: a job starts as a **Draft**, which isn't visible to anyone.
-A draft created Monday and published Friday should read as posted **Friday** —
-that's the date applicants actually see it go live.
+## Why I store the JWT in a cookie + send it as a Bearer header (vs localStorage vs in-memory vs httpOnly)
 
-**How it works** ([`backend/src/models/Job.ts`](backend/src/models/Job.ts)):
+-   **localStorage** — survives refresh and JS can read it (so Bearer works), but  
+    it’s the loosest about expiry/scope and the textbook “XSS grabs everything”  
+    target.
+-   **In-memory only** — safest against token theft (no durable copy to steal), but  
+    the user is logged out on every refresh.
+-   **httpOnly cookie** — JS can’t read it (great for XSS), but then JS can’t put it  
+    in a Bearer header either .
+-   **JS-readable cookie + Bearer header (what I chose)** — survives refresh, JS can  
+    read it to set the header, and I can still scope it with `SameSite=Lax` and a  
+    `Max-Age` that expires on its own.
 
-- `datePosted` is **optional** and has no `default` — a draft simply doesn't have
-  one.
-- A `pre("save")` hook stamps it the first time the job is `published`:
+Honest trade-offs:
 
-  ```ts
-  jobSchema.pre("save", function () {
-    if (this.status === "published" && !this.datePosted) {
-      this.datePosted = new Date();
-    }
-  });
-  ```
+-   Against XSS, a JS-readable cookie is **no safer than localStorage** — an injected  
+    script can read either. The real XSS mitigation isn’t the storage location; it’s  
+    React’s default escaping plus a CSP, which is where I’d invest next.
+-   **Authorization is enforced server-side** (401/403 on every route) no matter  
+    what, so this choice only affects how easily a token can be stolen — not what  
+    someone is allowed to do.
+-   The genuinely stronger design (in-memory access token + httpOnly refresh cookie)  
+    is in the last section — it’s the thing I’d do with more time.
 
-- The `!this.datePosted` guard means it's set **once** and never moves on later
-  saves (e.g. when the job is closed), so it always reflects when the job went
-  live. A job created directly as `published` gets stamped on its first save.
-- It's set with `new Date()` on the server, so the client can never forge it —
-  satisfying the "not trusted from the client" requirement.
+---
 
-**Trade-off / caveat**
+## How the socket authenticates from the browser, and why I use both TanStack Query and Store
 
-- Like the password-hashing hook, `pre("save")` only runs on document
-  `.save()`/`.create()` — **not** on `findOneAndUpdate`/`updateOne`. So the
-  publish endpoint loads the job, sets `status = "published"`, and `.save()`s it,
-  rather than doing a query-level update. Keeping all status transitions on the
-  document path is a deliberate constraint that also keeps this invariant honest.
+Socket auth ([`lib/socket.ts`](frontend/src/lib/socket.ts), [`SocketManager.tsx`](frontend/src/components/SocketManager.tsx)):
 
-## 3. How I handled socket room cleanup on disconnect
+-   A single headless `SocketManager` watches the auth store and opens a connection  
+    **only for a logged-in employer**.
+-   It passes the JWT in the handshake: `io(API_URL, { auth: { token } })`. The  
+    server verifies it and auto-joins the user’s room, so the client never sends a  
+    `join`. On logout or role change the effect disconnects (and reconnects if the  
+    token changes — e.g. logging in as a different user).
+-   Incoming `new_application` events become a toast plus an entry in a notifications  
+    store that drives the navbar badge.
 
-For the real-time "new application" notification, each connecting socket is
-authenticated from its handshake JWT and joins a **private room keyed by the user
-id** (`socket.join(user.id)`); the apply handler emits `new_application` to that
-room (`io.to(job.employer).emit(...)`). See
-[`backend/src/socket.ts`](backend/src/socket.ts).
+Why two state libraries — they’re for different jobs:
 
-**The cleanup decision: I rely on Socket.io's built-in room lifecycle rather than
-tracking sockets myself.** When a socket disconnects, Socket.io automatically
-removes it from every room it had joined, and a room with no remaining members
-simply ceases to exist (rooms are ephemeral — they're not persisted anywhere).
-Because I key rooms by the user id and keep **no manual `Map<userId, socket>`
-registry**, there is nothing to tear down on disconnect and no way to leak a
-stale room or a dangling socket reference.
+-   **TanStack Query** handles all *server* state (jobs, applicants, mutations):  
+    caching, dedup, `isPending`/`isError`, and cache invalidation after  
+    create/publish/close come for free. Pagination + filters live in the **URL**, so  
+    they’re shareable and the query key derives from them.
+-   **TanStack Store** handles *client* state I need to read outside React too: the  
+    session (guards read `token`/`user` imperatively during routing, where a hook  
+    can’t reach) and the in-memory notifications list. Putting auth in Query would be  
+    a category error.
+-   The notifications store is deliberately **in-memory** (cleared on refresh) — it’s  
+    a live session indicator, not an inbox. The real source of truth is the  
+    applicants list per job.
 
-This also handles the multi-connection case for free: an employer with several
-tabs open has multiple sockets in the same `user.id` room, each leaves
-independently when its tab closes, and the room disappears when the last one
-disconnects. Emitting to the room reaches all of their tabs.
+---
 
-**Why not a manual registry?** The obvious alternative — storing `socketId` (or a
-set of them) per user in a map — would force me to delete entries on `disconnect`,
-handle the race where a user reconnects before the old socket's disconnect fires,
-and clean up on errors. Rooms make all of that the adapter's problem, so the only
-disconnect handling I need is *none*.
+## Backend changes I had to make for the frontend (and a bug I found)
 
-**With more time:** for horizontal scaling I'd add the Redis adapter
-(`@socket.io/redis-adapter`) so rooms/emits work across multiple backend
-instances — the room-keyed design carries over unchanged.
+The task scoped me to the frontend, but a couple of required screens had no API to  
+call, so I added the minimum:
+
+-   **`GET /api/jobs/mine`** (employer) — the dashboard needs the employer’s own jobs  
+    in *all* statuses, but the only listing route was applicant-only and returned  
+    published jobs. An employer literally couldn’t see their own drafts.
+-   **`GET /api/jobs/:id`** (single job) — the applicant detail page and the employer  
+    edit page both load one job by id, and no such route existed. Published jobs are  
+    readable by anyone signed in; a draft/closed job returns **404** to anyone but  
+    its owner (so we don’t leak that another employer’s unpublished job exists). For  
+    applicants the response also includes an `applied` flag (see the next section).
+
+The bug: login/register were returning 500 with `jwt.sign is not a function`.
+
+-   `jsonwebtoken` is CommonJS, and `middleware/auth.ts` used `import * as jwt`.
+-   Under real ESM (`tsx`/`node`), the callable exports end up on the **default**  
+    export, so the namespace’s `jwt.sign` was `undefined`.
+-   One-line fix: `import jwt from "jsonwebtoken"`.
+-   Why it hid: the Jest suite passes because ts-jest compiles to CommonJS, where  
+    `import * as` becomes a `require` and `jwt.sign` resolves. So it was “tested and  
+    passing” *and* broken at runtime at the same time — a good reminder that green  
+    tests under a different module system aren’t a runtime guarantee.
+
+---
+
+## How I tell an applicant they’ve already applied — before they submit, not after
+
+Dedup is enforced on the backend (a unique `{ job, applicant }` index plus a  
+pre-upload gate), so a second apply always 409s. But the first version only showed  
+that *after* the user filled out and submitted the form, which is annoying for  
+someone revisiting a job.
+
+I added an `applied` boolean to the existing `GET /api/jobs/:id` response.
+
+Why:
+
+-   The detail page already fetches the job on load, so the flag rides along in  
+    **one request** — no extra round-trip, no new route to guard.
+-   It’s computed only for applicants (`Application.exists({ job, applicant })`);  
+    employers just get `false`.
+
+On the client ([`jobs.$jobId.tsx`](frontend/src/routes/jobs.$jobId.tsx)):
+
+-   The button uses `applied = (data.applied ?? false) || justApplied` — the server  
+    value disables it on load (a greyed-out “Already applied”), and a local  
+    `justApplied` flag flips it instantly after a successful apply or a 409 in  
+    another tab, without waiting for a refetch.
+-   The 409 handler stays as the authoritative backstop — the flag is just a UX  
+    optimization, never the real gate.
+
+---
+
+## What I’d add or improve
+
+-   **The better auth design: in-memory access token + httpOnly refresh cookie.**  
+    This is the real upgrade from the cookie+Bearer choice above, and what I’d build  
+    with more time:
+    
+    -   A **short-lived access token (5–15 min) kept only in memory**, sent as the  
+        `Authorization: Bearer` header. Never persisted, so XSS can’t steal a durable  
+        credential and it expires on its own in minutes.
+    -   A **long-lived refresh token in an httpOnly, `Secure`, `SameSite` cookie** that  
+        JS can’t read. On load (memory is empty) or on a 401, the app silently calls  
+        `POST /auth/refresh`; the browser sends the refresh cookie and the server mints  
+        a fresh access token.
+    -   **Rotate** the refresh token on each use and track its id server-side, which  
+        finally gives real **revocation** (logout-everywhere, kill a stolen token) —  
+        something a plain stateless JWT can’t do.
+    -   Add a **double-submit CSRF token** for the cookie-backed `/auth/refresh`, since  
+        cookies reintroduce CSRF risk.
+-   **Replace [Socket.io](http://Socket.io) with Server-Sent Events (SSE).** The notification flow is  
+    strictly one-directional — the server pushes `new_application` to the employer  
+    and the client never sends anything back over the channel. [Socket.io](http://Socket.io)’s  
+    bidirectional WebSocket.
+    
+-   **Downloadable CVs.** The backend stores the file but exposes no download route,
+    
+-   so the applicants view shows metadata (name, type, size) rather than a working  
+    link. I’d add an owner-guarded `GET /api/applications/:id/cv` that streams the  
+    file with the right `Content-Type`.
+    
+-   **Tests:** component tests for the apply flow and an e2e happy path (Playwright),  
+    plus at least one backend test that runs under native ESM so a regression like  
+    the `jwt` bug can’t hide behind ts-jest’s CommonJS output.
