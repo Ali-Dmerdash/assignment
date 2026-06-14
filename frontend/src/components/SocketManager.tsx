@@ -9,12 +9,6 @@ import type {
   NewApplicationPayload,
 } from "@/lib/types"
 
-/**
- * Headless component: keeps a single authenticated socket alive for any logged-in
- * user and turns room events into a toast + a notifications-store entry (which
- * drives the navbar badge). The server only emits to the relevant room, so an
- * employer receives `new_application` and an applicant `application_decision`.
- */
 export function SocketManager() {
   const { token, user } = useStore(authStore, (s) => s)
 
