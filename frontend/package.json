@@ -2,6 +2,7 @@
   "name": "frontend",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.14.0",
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
@@ -54,5 +55,8 @@
     "typescript": "^6",
     "vite": "^8",
     "vitest": "^4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["unrs-resolver"]
   }
 }

@@ -1,0 +1,65 @@
+name: ottonomi-assignment
+
+# Dev stack: MongoDB + backend (tsx watch) + frontend (Vite HMR).
+# Run from the repo root:  docker compose up --build
+# Backend env comes from backend/.env (copy it from backend/.env.example first).
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: ottonomi-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ottonomi-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Container overrides — backend/.env is host-oriented:
+      #   reach Mongo by its service name, and write uploads to the mounted volume.
+      - MONGO_URI=mongodb://mongo:27017/jobboard
+      - UPLOAD_DIR=/app/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ottonomi-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./frontend/.env
+    environment:
+      # Poll for file changes — Windows/Docker bind mounts don't deliver fs events
+      # to the container, so HMR needs polling.
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+
+volumes:
+  mongo-data:
+  uploads:

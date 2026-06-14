@@ -1,29 +1,26 @@
 # Job Board
 
 A full-stack job board (Node/Express/MongoDB backend + Vite/React frontend) in a
-pnpm monorepo. The backend and MongoDB run in Docker; the frontend runs with Vite.
-This README covers setup, environment variables, and how to run it locally. Design
-decisions are in [DECISIONS.md](DECISIONS.md).
+pnpm monorepo. Backend, frontend, and MongoDB all run in Docker via a single
+Compose file at the repo root. This README covers setup, environment variables,
+and how to run it locally. Design decisions are in [DECISIONS.md](DECISIONS.md).
 
 ## Prerequisites
 
-- **Docker** (runs the backend API + MongoDB via Docker Compose)
-- **Node 22+** and **pnpm 10+** (`corepack enable`) — for the frontend
+- **Docker** (runs MongoDB + backend + frontend via Docker Compose)
+- **Node 22+** and **pnpm 10+** (`corepack enable`) — only if you run the apps
+  outside Docker
 
 ## Setup
 
 ```bash
-# 1. Install dependencies (from the repo root)
-pnpm install
-
-# 2. Configure the backend environment
-cd backend
-cp .env.example .env        # then edit values (JWT_SECRET, CORS_ORIGIN, ...)
-
-# 3. Configure the frontend environment
-cd ../frontend
-cp .env.example .env        # VITE_API_URL is required (no default)
+# Configure both environments — Compose loads each via `env_file`
+cp backend/.env.example backend/.env     # then set JWT_SECRET, etc.
+cp frontend/.env.example frontend/.env
 ```
+
+Both `.env` files are required for the Docker flow (the compose `env_file`s point
+at them). For running the apps outside Docker, also run `pnpm install`.
 
 ## Environment variables
 
@@ -37,11 +34,12 @@ defaults). See [`backend/.env.example`](backend/.env.example).
 | `PORT`        | `5000`                               | Port the API listens on                                          |
 | `MONGO_URI`   | `mongodb://localhost:27017/jobboard` | MongoDB connection string (Atlas URI in deploy)                  |
 | `JWT_SECRET`  | `<long random string>`               | Secret used to sign/verify JWTs                                  |
-| `UPLOAD_DIR`  | `./uploads`                          | Directory where validated CVs are written                       |
+| `UPLOAD_DIR`  | `./uploads`                          | Directory where validated CVs are written                        |
 | `CORS_ORIGIN` | `http://localhost:3000`              | Allowed frontend origin (REST + Socket.io); deployed URL in prod |
 
-> Running via Docker Compose (below), `PORT`, `MONGO_URI`, and `UPLOAD_DIR` are set
-> by the compose file; `JWT_SECRET` and `CORS_ORIGIN` are read from `backend/.env`.
+> Under Docker Compose, `MONGO_URI` and `UPLOAD_DIR` are overridden by the compose
+> file (the Mongo service name + the mounted volume); `PORT`, `JWT_SECRET`, and
+> `CORS_ORIGIN` are read from `backend/.env`.
 
 ### Frontend
 
@@ -51,28 +49,36 @@ See [`frontend/.env.example`](frontend/.env.example).
 | -------------- | ----------------------- | -------------------------------------------------------------- |
 | `VITE_API_URL` | `http://localhost:5000` | Base URL of the backend (REST + Socket.io). No trailing slash. |
 
+> Under Docker, the frontend container loads `VITE_API_URL` from `frontend/.env`
+> via the compose `env_file`. The browser runs on the host, so `localhost:5000`
+> reaches the mapped backend port.
+
 ## Running locally
 
-### Backend + MongoDB (Docker)
-
-From `backend/`, start both containers with Docker Compose:
+From the repo root, bring up the whole stack:
 
 ```bash
-cd backend
 docker compose up --build        # add -d to run detached
 ```
 
-This builds and runs the API on **http://localhost:5000** and MongoDB on
-`localhost:27017`. Use `--build` the first time and after changing dependencies;
-plain `docker compose up` is enough for later runs (the source is bind-mounted and
-hot-reloads).
+This starts:
 
-Verify it's up: `GET http://localhost:5000/api/health` → `{ "status": "ok" }`.
+- **MongoDB** on `localhost:27017`
+- **Backend API** on **http://localhost:5000**
+- **Frontend** on **http://localhost:3000**
 
-### Frontend (Vite)
+Use `--build` the first time and after changing dependencies; plain
+`docker compose up` is enough afterward (source is bind-mounted and hot-reloads).
 
-From the repo root:
+Verify the API: `GET http://localhost:5000/api/health` → `{ "status": "ok" }`.
+
+### Running outside Docker (optional)
 
 ```bash
-pnpm dev:frontend                # http://localhost:3000
+pnpm install
+cd backend
+docker compose up -d mongo
+cd ..
+pnpm dev:backend     # needs MongoDB running (e.g. docker compose up -d mongo)
+pnpm dev:frontend    # http://localhost:3000  (needs frontend/.env)
 ```
