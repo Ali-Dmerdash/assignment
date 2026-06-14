@@ -89,21 +89,6 @@ On the client ([`jobs.$jobId.tsx`](frontend/src/routes/jobs.$jobId.tsx)):
 
 ---
 
-## **_bug_** : login/register were returning 500 with `jwt.sign is not a function`
-
-- `jsonwebtoken` is CommonJS, and [`middleware/auth.ts`](backend/src/middleware/auth.ts) used `import * as jwt`.
-
-- Under real ESM (`tsx`/`node`), the callable exports end up on the **default**  
-  export, so the namespace’s `jwt.sign` was `undefined`.
-
-- One-line fix: `import jwt from "jsonwebtoken"`.
-
-- Why it hid: the Jest suite passes because ts-jest compiles to CommonJS, where  
-  `import * as` becomes a `require` and `jwt.sign` resolves. So it was tested and  
-  passing but broken at runtime at the same time.
-
----
-
 ## **_bug_** : Vercel deploy 404
 
 Deploying the frontend to Vercel returned the platform **`404: NOT_FOUND`** on every  
