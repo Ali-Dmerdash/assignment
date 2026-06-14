@@ -65,24 +65,6 @@ I let [Socket.io](http://Socket.io)’s built-in room lifecycle do the cleanup i
 
 ---
 
-## Why two state libraries — they’re for different jobs:
-
-- **[TanStack Query](https://tanstack.com/query/latest)** handles all _server_ state (jobs, applicants, mutations):  
-  caching, dedup, `isPending`/`isError`, and cache invalidation after  
-  create/publish/close come for free. Pagination + filters live in the **URL**, so  
-  they’re shareable and the query key derives from them.
-
-- **[TanStack Store](https://tanstack.com/store/latest)** handles _client_ state I need to read outside React too: the  
-  session (guards read `token`/`user` imperatively during routing, where a hook  
-  can’t reach) and the in-memory notifications list. Putting auth in Query would be  
-  a category error.
-
-- The notifications store is deliberately **in-memory** (cleared on refresh) — it’s  
-  a live session indicator, not an inbox. The real source of truth is the  
-  applicants list per job.
-
----
-
 ## How I tell an applicant they’ve already applied — before they submit, not after
 
 Dedup is enforced on the backend, so a second apply always 409s.
