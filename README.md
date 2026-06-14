@@ -76,9 +76,7 @@ Verify the API: `GET http://localhost:5000/api/health` → `{ "status": "ok" }`.
 
 ```bash
 pnpm install
-cd backend
-docker compose up -d mongo
-cd ..
-pnpm dev:backend     # needs MongoDB running (e.g. docker compose up -d mongo)
-pnpm dev:frontend    # http://localhost:3000  (needs frontend/.env)
+docker compose up -d mongo   # just MongoDB, from the repo root
+pnpm dev:backend             # needs MongoDB running
+pnpm dev:frontend            # http://localhost:3000  (needs frontend/.env)
 ```
