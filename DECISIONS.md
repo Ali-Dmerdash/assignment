@@ -136,6 +136,6 @@ serve/routing problem, not a build one.
 - **Hosting on [Railway](https://railway.com/).** Right now it's split
   across three providers — MongoDB on Atlas, the backend on Railway, and the
   frontend on Vercel. I'd move all three onto Railway (managed Mongo + the backend
-  - a static frontend service) so it's one dashboard, one set of env vars, and a
-    same-network DB connection, instead of juggling three accounts and the
-    cross-origin setup between them.
+  a static frontend service) so it's one dashboard, one set of env vars, and a
+  same-network DB connection, instead of juggling three accounts and the
+  cross-origin setup between them.
