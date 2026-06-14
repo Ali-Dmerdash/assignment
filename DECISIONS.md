@@ -89,6 +89,13 @@ On the client ([`jobs.$jobId.tsx`](frontend/src/routes/jobs.$jobId.tsx)):
 
 ---
 
+## Rate limiting the apply endpoint
+
+`POST /api/jobs/:id/apply` is rate-limited per applicant with `express-rate-limit`.
+I set it low on purpose — **3 applications per 3 minutes** — so we can easily trigger it in demo.
+
+---
+
 ## **_bug_** : Vercel deploy 404
 
 Deploying the frontend to Vercel returned the platform **`404: NOT_FOUND`** on every  
